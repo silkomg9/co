@@ -4,9 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sparkles, Mail, Lock, ArrowRight } from "lucide-react";
-// Import firebase if needed
-// import { auth } from "@/lib/firebase";
-// import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import {
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+} from "firebase/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,14 +22,9 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    
-    // Simulate login for skeletal framework
     try {
-      // await signInWithEmailAndPassword(auth, email, password);
-      setTimeout(() => {
-        router.push("/dashboard");
-        setLoading(false);
-      }, 1000);
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "로그인에 실패했습니다.";
       setError(message);
@@ -37,14 +35,10 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError("");
-    
     try {
-      // const provider = new GoogleAuthProvider();
-      // await signInWithPopup(auth, provider);
-      setTimeout(() => {
-        router.push("/dashboard");
-        setLoading(false);
-      }, 1000);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      router.push("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "구글 로그인에 실패했습니다.";
       setError(message);
@@ -55,7 +49,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50/60 px-6">
       <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-100/50">
-        
+
         {/* Header */}
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm mb-4">
@@ -129,24 +123,11 @@ export default function LoginPage() {
           type="button"
           className="flex w-full items-center justify-center gap-2.5 rounded-full border border-slate-200/80 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-98 disabled:opacity-50"
         >
-          {/* Custom Google Logo Icon SVG */}
           <svg className="h-4 w-4" viewBox="0 0 24 24">
-            <path
-              fill="#EA4335"
-              d="M12 5.04c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 1.84 14.94 1 12 1 7.35 1 3.39 3.67 1.41 7.56l3.7 2.87C6.01 7.21 8.76 5.04 12 5.04z"
-            />
-            <path
-              fill="#4285F4"
-              d="M23.49 12.27c0-.81-.07-1.59-.2-2.34H12v4.44h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.7 2.87c2.16-2 3.73-4.94 3.73-8.55z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.11 14.78a7.12 7.12 0 0 1 0-4.56l-3.7-2.87A11.96 11.96 0 0 0 0 12c0 1.77.39 3.44 1.41 4.97l3.7-2.87z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.1.74-2.5 1.18-4.26 1.18-3.24 0-5.99-2.17-6.97-5.11l-3.7 2.87C3.39 20.33 7.35 23 12 23z"
-            />
+            <path fill="#EA4335" d="M12 5.04c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 1.84 14.94 1 12 1 7.35 1 3.39 3.67 1.41 7.56l3.7 2.87C6.01 7.21 8.76 5.04 12 5.04z" />
+            <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.34H12v4.44h6.44c-.28 1.48-1.12 2.73-2.38 3.58l3.7 2.87c2.16-2 3.73-4.94 3.73-8.55z" />
+            <path fill="#FBBC05" d="M5.11 14.78a7.12 7.12 0 0 1 0-4.56l-3.7-2.87A11.96 11.96 0 0 0 0 12c0 1.77.39 3.44 1.41 4.97l3.7-2.87z" />
+            <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.7-2.87c-1.1.74-2.5 1.18-4.26 1.18-3.24 0-5.99-2.17-6.97-5.11l-3.7 2.87C3.39 20.33 7.35 23 12 23z" />
           </svg>
           Google 계정으로 계속하기
         </button>

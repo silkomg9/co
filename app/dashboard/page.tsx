@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sparkles, Plus, FileText, Calendar, ArrowRight, Layers, LogOut, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
 
 interface Project {
   id: string;
@@ -14,6 +17,9 @@ interface Project {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -21,54 +27,63 @@ export default function DashboardPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
 
-  // Fetch projects from Firestore API
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser) {
+        router.replace("/login");
+        return;
+      }
+      setUser(firebaseUser);
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+
     let active = true;
     async function loadProjects() {
       try {
         setError("");
-        const res = await fetch("/api/projects");
+        const token = await user!.getIdToken();
+        const res = await fetch("/api/projects", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error("프로젝트 목록을 가져오지 못했습니다.");
         const data = await res.json();
-        if (active) {
-          setProjects(data.projects || []);
-        }
+        if (active) setProjects(data.projects || []);
       } catch (err) {
         if (active) {
           const message = err instanceof Error ? err.message : "오류가 발생했습니다.";
           setError(message);
         }
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
     loadProjects();
-    return () => {
-      active = false;
-    };
-  }, []);
+    return () => { active = false; };
+  }, [user]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || !user) return;
 
     setActionLoading(true);
     setError("");
-
     try {
+      const token = await user.getIdToken();
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ title: newTitle }),
       });
-
       if (!res.ok) throw new Error("프로젝트 생성에 실패했습니다.");
       const newProj = await res.json();
-
       setProjects([newProj, ...projects]);
       setNewTitle("");
       setShowCreateModal(false);
@@ -80,38 +95,49 @@ export default function DashboardPage() {
     }
   };
 
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push("/");
+  };
+
   const getStatusBadge = (status: Project["status"]) => {
     switch (status) {
       case "completed":
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-            <CheckCircle2 className="h-3 w-3" />
-            계획서 완성
+            <CheckCircle2 className="h-3 w-3" />계획서 완성
           </span>
         );
       case "coaching":
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-            <Sparkles className="h-3 w-3" />
-            코칭 진행중
+            <Sparkles className="h-3 w-3" />코칭 진행중
           </span>
         );
       case "notice_analyzed":
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-            <AlertCircle className="h-3 w-3" />
-            공고분석 완료
+            <AlertCircle className="h-3 w-3" />공고분석 완료
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-            <Layers className="h-3 w-3" />
-            작성 시작
+            <Layers className="h-3 w-3" />작성 시작
           </span>
         );
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "사용자";
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50/50 text-slate-800">
@@ -125,14 +151,14 @@ export default function DashboardPage() {
             <span>공모코치 AI</span>
           </Link>
           <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-slate-600">홍길동님</span>
-            <Link 
-              href="/"
+            <span className="text-sm font-medium text-slate-600">{displayName}님</span>
+            <button
+              onClick={handleLogout}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:text-slate-900 shadow-sm"
               title="로그아웃"
             >
               <LogOut className="h-4 w-4" />
-            </Link>
+            </button>
           </div>
         </div>
       </header>
@@ -145,7 +171,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Title Section */}
         <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">내 프로젝트</h1>
@@ -214,31 +239,25 @@ export default function DashboardPage() {
                     <h3 className="font-bold text-slate-950 line-clamp-1">{project.title}</h3>
                     {getStatusBadge(project.status)}
                   </div>
-                  
                   {project.noticeFile && (
                     <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 mb-6">
                       <FileText className="h-3.5 w-3.5 text-slate-400" />
                       <span className="line-clamp-1">{project.noticeFile}</span>
                     </div>
                   )}
-
-                  {/* Progress Bar */}
                   <div className="mb-6">
                     <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1.5">
                       <span>진행률</span>
                       <span>{project.progress}%</span>
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-slate-100">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          project.status === "completed" ? "bg-emerald-500" : "bg-blue-600"
-                        }`}
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${project.status === "completed" ? "bg-emerald-500" : "bg-blue-600"}`}
                         style={{ width: `${project.progress}%` }}
-                      ></div>
+                      />
                     </div>
                   </div>
                 </div>
-
                 <div className="flex items-center justify-between border-t border-slate-100 pt-4">
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
                     <Calendar className="h-3.5 w-3.5" />
@@ -264,7 +283,6 @@ export default function DashboardPage() {
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <h2 className="text-xl font-bold text-slate-950 mb-1">새 프로젝트 만들기</h2>
             <p className="text-xs text-slate-500 mb-6">지원하고자 하는 공모전 혹은 사업의 이름을 입력하세요.</p>
-            
             <form onSubmit={handleCreateProject} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">프로젝트 제목</label>
@@ -277,14 +295,10 @@ export default function DashboardPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/30 py-2.5 px-3.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
                 />
               </div>
-
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewTitle("");
-                  }}
+                  onClick={() => { setShowCreateModal(false); setNewTitle(""); }}
                   className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                 >
                   취소
