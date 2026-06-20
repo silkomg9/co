@@ -7,8 +7,6 @@ const nextConfig: NextConfig = {
     "firebase-admin/auth",
     "firebase-admin/firestore",
     "firebase-admin/storage",
-    "jose",
-    "jwks-rsa",
   ],
 };
 
