@@ -68,8 +68,8 @@ export async function POST(request: Request) {
 
     // Update parent project status to 'coaching' and progress to 60%
     await adminDb.collection('projects').doc(projectId).update({
-      status: 'coaching',
-      progress: 60,
+      status: 'notice_analyzed',
+      progress: 30,
       noticeFile: noticeText.substring(0, 30) + '...', // Save snippet as proxy file name
     });
 

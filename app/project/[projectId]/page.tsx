@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { 
   Sparkles, FileText, ArrowRight, ArrowLeft, Send, CheckCircle, 
   Loader2, AlertCircle, Copy, Check, LayoutGrid, Award, DollarSign, Target, HelpCircle 
@@ -42,7 +41,6 @@ interface PageProps {
 }
 
 export default function ProjectDetailPage({ params }: PageProps) {
-  const router = useRouter();
   const { projectId } = use(params);
 
   // States
@@ -63,6 +61,64 @@ export default function ProjectDetailPage({ params }: PageProps) {
   // Active step (1: Notice, 2: Idea & Coaching, 3: Plan Editor)
   const [activeStep, setActiveStep] = useState(1);
 
+  // File Upload states and handlers
+  const [fileUploading, setFileUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFileUpload = async (file: File) => {
+    if (file.type !== "application/pdf") {
+      setError("PDF 파일만 업로드할 수 있습니다.");
+      return;
+    }
+
+    setFileUploading(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("PDF 텍스트 파싱에 실패했습니다.");
+      const data = await res.json();
+      
+      if (data.text) {
+        setNoticeText(data.text);
+      } else {
+        throw new Error("추출된 텍스트가 없습니다.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "파일 파싱 중 오류가 발생했습니다.";
+      setError(message);
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
   // Fetch project details on load
   useEffect(() => {
     async function loadProject() {
@@ -74,7 +130,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
         const res = await fetch("/api/projects");
         if (!res.ok) throw new Error("프로젝트 목록을 불러오지 못했습니다.");
         const data = await res.json();
-        const found = data.projects?.find((p: any) => p.id === projectId);
+        const found = data.projects?.find((p: ProjectDetails) => p.id === projectId);
         
         if (!found) {
           // Fallback mockup local state if project is recently created and db is empty
@@ -116,8 +172,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
             evidence: "공고문 본문 제3조(지원대상) 및 제5조(평가기준) 참조",
           });
         }
-      } catch (err: any) {
-        setError(err.message || "프로젝트 로드 중 오류가 발생했습니다.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "프로젝트 로드 중 오류가 발생했습니다.";
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -142,10 +199,11 @@ export default function ProjectDetailPage({ params }: PageProps) {
       const data = await res.json();
       
       setAnalysis(data);
-      setProject(prev => prev ? { ...prev, status: "notice_analyzed", progress: 60 } : null);
+      setProject(prev => prev ? { ...prev, status: "notice_analyzed", progress: 30 } : null);
       setActiveStep(1.5); // Move to analysis view
-    } catch (err: any) {
-      setError(err.message || "분석 과정 중 오류가 발생했습니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "분석 과정 중 오류가 발생했습니다.";
+      setError(message);
     } finally {
       setActionLoading(false);
     }
@@ -168,12 +226,14 @@ export default function ProjectDetailPage({ params }: PageProps) {
       setProject(prev => prev ? { 
         ...prev, 
         status: "coaching", 
+        progress: 60,
         initialIdea: ideaText, 
         coachingQuestions: data.questions 
       } : null);
       setActiveStep(2); // Go to coaching input step
-    } catch (err: any) {
-      setError(err.message || "코칭 질문을 받아오지 못했습니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "코칭 질문을 받아오지 못했습니다.";
+      setError(message);
     } finally {
       setActionLoading(false);
     }
@@ -195,8 +255,9 @@ export default function ProjectDetailPage({ params }: PageProps) {
       setPlan(data);
       setProject(prev => prev ? { ...prev, status: "completed", progress: 100 } : null);
       setActiveStep(3); // Go to plan editor step
-    } catch (err: any) {
-      setError(err.message || "사업계획서 생성 중 오류가 발생했습니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "사업계획서 생성 중 오류가 발생했습니다.";
+      setError(message);
     } finally {
       setActionLoading(false);
     }
@@ -307,10 +368,55 @@ ${plan.benefit}
             </div>
             <h2 className="text-xl font-bold text-slate-900">공고문 정보 입력하기</h2>
             <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">
-              분석할 공고문 텍스트 전체를 붙여넣으세요. AI가 사업 목표, 지원 조건, 핵심 평가 항목 등을 발췌하여 요약해 드립니다.
+              분석할 공고문 PDF 파일을 업로드하거나 텍스트를 직접 입력해 주세요. AI가 사업 목표, 지원 조건, 핵심 평가 항목 등을 발췌하여 요약해 드립니다.
             </p>
 
-            <div className="mt-6">
+            {/* PDF Upload Box */}
+            <div 
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("pdf-file-input")?.click()}
+              className={`mt-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
+                dragActive ? "border-blue-500 bg-blue-50/30" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50/50"
+              }`}
+            >
+              <input 
+                id="pdf-file-input"
+                type="file" 
+                accept=".pdf" 
+                className="hidden" 
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
+              {fileUploading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <p className="text-sm font-semibold text-blue-600">PDF 파일 분석 및 텍스트 추출 중...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-slate-500">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-1">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">이곳에 PDF 공고문 파일을 끌어다 놓거나 클릭하세요</p>
+                  <p className="text-xs">지원 형식: PDF (최대 10MB)</p>
+                </div>
+              )}
+            </div>
+
+            {/* OR Divider */}
+            <div className="my-6 flex items-center justify-center gap-3">
+              <div className="h-px flex-1 bg-slate-200"></div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">또는 직접 입력</span>
+              <div className="h-px flex-1 bg-slate-200"></div>
+            </div>
+
+            <div className="mt-2">
               <textarea
                 rows={12}
                 placeholder="공고 내용을 이곳에 붙여넣으세요. (예: 사업 목적, 대상 자격, 예산 한도, 배점 기준 등)"

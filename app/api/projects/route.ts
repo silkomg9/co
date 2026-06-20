@@ -25,9 +25,9 @@ export async function POST(request: Request) {
     const newProject = {
       ownerId: 'user-123', // Hardcoded MVP owner
       title,
-      status: 'notice_analyzed',
+      status: 'initial',
       createdAt: new Date().toISOString(),
-      progress: 30, // Initially, 30% progress after creation
+      progress: 0,
     };
 
     const docRef = await adminDb.collection('projects').add(newProject);

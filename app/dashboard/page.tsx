@@ -22,23 +22,32 @@ export default function DashboardPage() {
   const [newTitle, setNewTitle] = useState("");
 
   // Fetch projects from Firestore API
-  async function fetchProjects() {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await fetch("/api/projects");
-      if (!res.ok) throw new Error("프로젝트 목록을 가져오지 못했습니다.");
-      const data = await res.json();
-      setProjects(data.projects || []);
-    } catch (err: any) {
-      setError(err.message || "오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    fetchProjects();
+    let active = true;
+    async function loadProjects() {
+      try {
+        setError("");
+        const res = await fetch("/api/projects");
+        if (!res.ok) throw new Error("프로젝트 목록을 가져오지 못했습니다.");
+        const data = await res.json();
+        if (active) {
+          setProjects(data.projects || []);
+        }
+      } catch (err) {
+        if (active) {
+          const message = err instanceof Error ? err.message : "오류가 발생했습니다.";
+          setError(message);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+    loadProjects();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -63,8 +72,9 @@ export default function DashboardPage() {
       setProjects([newProj, ...projects]);
       setNewTitle("");
       setShowCreateModal(false);
-    } catch (err: any) {
-      setError(err.message || "프로젝트 생성 중 오류가 발생했습니다.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "프로젝트 생성 중 오류가 발생했습니다.";
+      setError(message);
     } finally {
       setActionLoading(false);
     }
