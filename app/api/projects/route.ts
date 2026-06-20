@@ -11,6 +11,8 @@ export async function GET() {
     return NextResponse.json({ projects }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error('[GET /api/projects]', message, stack);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
     }
 
     const newProject = {
-      ownerId: 'user-123', // Hardcoded MVP owner
+      ownerId: 'user-123',
       title,
       status: 'initial',
       createdAt: new Date().toISOString(),
@@ -34,6 +36,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: docRef.id, ...newProject }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error('[POST /api/projects]', message, stack);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

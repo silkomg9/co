@@ -1,46 +1,71 @@
-import { getApps, initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
+import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { Auth, getAuth } from 'firebase-admin/auth';
 
-const firebaseAdminConfig = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-};
+// ─── Lazy singleton ───────────────────────────────────────────────────────────
+let _app: App | null = null;
+let _db: Firestore | null = null;
+let _auth: Auth | null = null;
 
-// Check if Firebase Admin is already initialized to prevent hot-reloading errors in development
-if (getApps().length === 0) {
-  // Only initialize if environment variables are provided and appear to be genuine
-  const hasRealCreds = 
-    firebaseAdminConfig.projectId && 
-    firebaseAdminConfig.clientEmail && 
-    firebaseAdminConfig.privateKey &&
-    firebaseAdminConfig.privateKey.includes("-----BEGIN PRIVATE KEY-----") &&
-    !firebaseAdminConfig.privateKey.includes("YOUR_PRIVATE_KEY_HERE");
+function getAdminApp(): App {
+  if (_app) return _app;
+
+  if (getApps().length > 0) {
+    _app = getApps()[0];
+    return _app;
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  // Vercel stores the key with literal \n — convert to real newlines
+  const privateKey = rawKey?.replace(/\\n/g, '\n');
+
+  const hasRealCreds =
+    projectId &&
+    clientEmail &&
+    privateKey &&
+    privateKey.includes('-----BEGIN PRIVATE KEY-----');
 
   if (hasRealCreds) {
-    try {
-      initializeApp({
-        credential: cert(firebaseAdminConfig),
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      });
-    } catch (err) {
-      console.error("Failed to initialize Firebase Admin with credentials, falling back:", err);
-      initializeApp({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'dummy-project-id'
-      });
-    }
-  } else {
-    // Fallback for local development if credentials aren't fully configured yet,
-    // to prevent app from crashing immediately on startup
-    console.warn("Firebase Admin credentials are not fully configured. API routes relying on Admin SDK might fail.");
-    initializeApp({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'dummy-project-id'
+    _app = initializeApp({
+      credential: cert({ projectId, clientEmail, privateKey }),
     });
+  } else {
+    console.warn('[firebase-admin] Missing credentials — using projectId only.');
+    _app = initializeApp({ projectId: projectId ?? 'dummy' });
   }
+
+  return _app;
 }
 
-export const adminDb = getFirestore();
-export const adminAuth = getAuth();
-export const adminStorage = getStorage();
+// ─── Exported accessors (no module-level side effects) ───────────────────────
+export function getAdminDb(): Firestore {
+  if (!_db) {
+    getAdminApp();
+    _db = getFirestore();
+  }
+  return _db;
+}
+
+export function getAdminAuth(): Auth {
+  if (!_auth) {
+    getAdminApp();
+    _auth = getAuth();
+  }
+  return _auth;
+}
+
+// Convenience aliases kept for backward compat (lazily resolved on first use)
+export const adminDb = new Proxy({} as Firestore, {
+  get(_t, prop) {
+    return (getAdminDb() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
+
+export const adminAuth = new Proxy({} as Auth, {
+  get(_t, prop) {
+    return (getAdminAuth() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
