@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Sparkles, FileText, ArrowRight, ArrowLeft, Send, CheckCircle,
-  Loader2, AlertCircle, Copy, Check, LayoutGrid, Award, DollarSign, Target, HelpCircle
+  Loader2, AlertCircle, Copy, Check, LayoutGrid, Award, DollarSign, Target, HelpCircle, ExternalLink, Globe
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -30,6 +30,11 @@ interface AnalysisData {
   evidence: string;
 }
 
+interface WebSource {
+  title: string;
+  uri: string;
+}
+
 interface PlanData {
   businessName: string;
   necessity: string;
@@ -37,6 +42,7 @@ interface PlanData {
   schedule: string;
   indicator: string;
   benefit: string;
+  sources?: WebSource[];
 }
 
 interface PageProps {
@@ -662,6 +668,31 @@ ${plan.benefit}
                 <h4 className="text-sm font-bold text-blue-900 mb-2">5. 기대 효과</h4>
                 <p className="text-xs leading-relaxed text-blue-950 whitespace-pre-wrap">{plan.benefit}</p>
               </div>
+
+              {/* 웹 리서치 출처 */}
+              {plan.sources && plan.sources.length > 0 && (
+                <div className="rounded-xl bg-slate-50/50 p-5 border border-slate-100">
+                  <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-800 mb-3">
+                    <Globe className="h-4 w-4 text-slate-400" />
+                    최신 웹 리서치 근거 자료
+                  </h4>
+                  <ul className="space-y-1.5">
+                    {plan.sources.map((src, idx) => (
+                      <li key={idx}>
+                        <a
+                          href={src.uri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                          <span className="line-clamp-1">{src.title}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         )}

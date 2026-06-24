@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { researchWeb, type WebSource } from '@/lib/gemini';
 
 export async function POST(request: Request) {
   try {
@@ -36,27 +37,46 @@ export async function POST(request: Request) {
 
     const analysis = analysisSnapshot.docs[0].data();
     let planResult;
+    let sources: WebSource[] = [];
 
     if (process.env.GEMINI_API_KEY) {
       try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
+        const apiKey = process.env.GEMINI_API_KEY;
 
         const qAndAPairs = coachingQuestions
           .map((q: string, idx: number) => `Q: ${q}\nA: ${answers[idx] || '미답변'}`)
           .join('\n\n');
 
+        // 1단계: 사업 근거가 될 최신 시장 데이터/정책/통계 리서치 (검색 그라운딩)
+        const research = await researchWeb(
+          apiKey,
+          `다음 사업계획의 필요성과 기대효과를 뒷받침할 최신(2024~2025년) 시장 규모, 통계, 정부 정책, 경쟁 동향을 조사해줘.
+           가능하면 구체적 수치와 출처를 포함해줘. 핵심만 간결히.
+
+           [아이디어]
+           ${project.initialIdea}
+
+           [보강 문답]
+           ${qAndAPairs}`
+        );
+        sources = research.sources;
+
+        // 2단계: 리서치를 근거로 사업계획서를 JSON으로 종합
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+
         const prompt = `
           당신은 전문 사업계획서 튜터 및 기획 전문가입니다.
-          [공고 요약 정보], [사용자 초기 아이디어], 그리고 [코칭 질문과 답변]을 연계하여 공모 목적에 부합하는 체계적인 사업계획서 초안을 작성하십시오.
-          
+          [공고 요약 정보], [사용자 초기 아이디어], [코칭 질문과 답변], 그리고 [최신 웹 리서치]를 연계하여 공모 목적에 부합하는 체계적인 사업계획서 초안을 작성하십시오.
+
           [작성 지침]
           1. 당선 확률이나 선정을 무책임하게 약속하지 마십시오.
           2. 없는 실적이나 특허, 자금을 허위로 꾸며내지 마십시오.
           3. 사용자의 답변 내용을 근거로 하되, 사업계획서의 전문성을 높여줄 세련된 비즈니스 어휘와 논리적 서술 방식을 취해주십시오.
+          4. [최신 웹 리서치]의 구체적 수치·정책·시장 동향을 '사업의 필요성'과 '기대 효과'에 적극 인용하여 설득력을 높이십시오. 단, 리서치에 없는 수치를 지어내지 마십시오.
 
           [공고 요약 정보]
           - 사업 목적: ${analysis.summary}
@@ -68,6 +88,9 @@ export async function POST(request: Request) {
 
           [코칭 문답 기록]
           ${qAndAPairs}
+
+          [최신 웹 리서치]
+          ${research.text}
 
           [출력 JSON 스키마]
           {
@@ -99,6 +122,7 @@ export async function POST(request: Request) {
       .collection('plans')
       .add({
         ...planResult,
+        sources,
         createdAt: new Date().toISOString(),
       });
 
@@ -112,6 +136,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       id: planRef.id,
       ...planResult,
+      sources,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';

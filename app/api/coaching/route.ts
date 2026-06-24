@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { researchWeb } from '@/lib/gemini';
 
 export async function POST(request: Request) {
   try {
@@ -28,7 +29,23 @@ export async function POST(request: Request) {
 
     if (process.env.GEMINI_API_KEY) {
       try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const apiKey = process.env.GEMINI_API_KEY;
+
+        // 1단계: 아이디어/시장/경쟁사에 대한 최신 웹 리서치 (검색 그라운딩)
+        const research = await researchWeb(
+          apiKey,
+          `다음 창업/공모 아이디어의 최신 시장 동향, 경쟁 서비스, 관련 정부 정책을 2024~2025년 기준으로 조사해줘.
+           평가 기준 대비 약점이 될 만한 지점도 함께 짚어줘. 핵심만 간결히.
+
+           [공고 평가 기준]
+           ${analysis.evaluationCriteria}
+
+           [아이디어]
+           ${idea}`
+        );
+
+        // 2단계: 리서치 결과를 근거로 코칭 질문을 JSON으로 종합
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
           model: 'gemini-2.5-flash',
           generationConfig: { responseMimeType: 'application/json' },
@@ -36,12 +53,13 @@ export async function POST(request: Request) {
 
         const prompt = `
           당신은 지원사업/공모전 전문 컨설턴트이자 멘토입니다.
-          제시된 [공고 분석 내용]과 사용자의 [초기 아이디어]를 대조 분석하여, 이 아이디어가 사업계획서로 작성되었을 때 경쟁력을 갖추기 위해 보완해야 할 점을 파악하고, 사용자에게 정보를 얻어내기 위한 유도 코칭 질문 3개를 작성하십시오.
-          
+          제시된 [공고 분석 내용], 사용자의 [초기 아이디어], 그리고 [최신 웹 리서치]를 대조 분석하여, 이 아이디어가 사업계획서로 작성되었을 때 경쟁력을 갖추기 위해 보완해야 할 점을 파악하고, 사용자에게 정보를 얻어내기 위한 유도 코칭 질문 3개를 작성하십시오.
+
           [코칭 질문 작성 팁]
           1. 사용자가 이해하기 쉽고 답변하기 쉬운 구체적인 질문이어야 합니다.
           2. 공고의 평가 기준(예: 기술 차별성, 실현 가능성, 예산 등)에 기초하여 부족한 구체적 수치나 방법론을 물어보십시오.
-          3. 지나치게 학술적이거나 광범위한 질문은 피하십시오.
+          3. 최신 웹 리서치에서 드러난 경쟁 동향/정책을 반영하여, 차별화를 끌어낼 수 있는 날카로운 질문을 포함하십시오.
+          4. 지나치게 학술적이거나 광범위한 질문은 피하십시오.
 
           [공고 분석 내용]
           - 사업 목적: ${analysis.summary}
@@ -50,6 +68,9 @@ export async function POST(request: Request) {
 
           [사용자 초기 아이디어]
           ${idea}
+
+          [최신 웹 리서치]
+          ${research.text}
 
           [출력 JSON 스키마]
           {
