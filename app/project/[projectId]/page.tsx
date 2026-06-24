@@ -2,10 +2,13 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { 
-  Sparkles, FileText, ArrowRight, ArrowLeft, Send, CheckCircle, 
-  Loader2, AlertCircle, Copy, Check, LayoutGrid, Award, DollarSign, Target, HelpCircle 
+import { useRouter } from "next/navigation";
+import {
+  Sparkles, FileText, ArrowRight, ArrowLeft, Send, CheckCircle,
+  Loader2, AlertCircle, Copy, Check, LayoutGrid, Award, DollarSign, Target, HelpCircle
 } from "lucide-react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface ProjectDetails {
   id: string;
@@ -42,6 +45,7 @@ interface PageProps {
 
 export default function ProjectDetailPage({ params }: PageProps) {
   const { projectId } = use(params);
+  const router = useRouter();
 
   // States
   const [project, setProject] = useState<ProjectDetails | null>(null);
@@ -121,13 +125,15 @@ export default function ProjectDetailPage({ params }: PageProps) {
 
   // Fetch project details on load
   useEffect(() => {
-    async function loadProject() {
+    async function loadProject(token: string) {
       try {
         setLoading(true);
         setError("");
-        
+
         // 1. Fetch project meta
-        const res = await fetch("/api/projects");
+        const res = await fetch("/api/projects", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error("프로젝트 목록을 불러오지 못했습니다.");
         const data = await res.json();
         const found = data.projects?.find((p: ProjectDetails) => p.id === projectId);
@@ -180,8 +186,16 @@ export default function ProjectDetailPage({ params }: PageProps) {
       }
     }
 
-    loadProject();
-  }, [projectId]);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+      const token = await user.getIdToken();
+      loadProject(token);
+    });
+    return unsubscribe;
+  }, [projectId, router]);
 
   // Actions
   const handleAnalyzeNotice = async () => {
