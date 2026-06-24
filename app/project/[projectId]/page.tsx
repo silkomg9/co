@@ -130,16 +130,13 @@ export default function ProjectDetailPage({ params }: PageProps) {
         setLoading(true);
         setError("");
 
-        // 1. Fetch project meta
-        const res = await fetch("/api/projects", {
+        // 단일 프로젝트 + 저장된 분석/계획서 조회
+        const res = await fetch(`/api/projects/${projectId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("프로젝트 목록을 불러오지 못했습니다.");
-        const data = await res.json();
-        const found = data.projects?.find((p: ProjectDetails) => p.id === projectId);
-        
-        if (!found) {
-          // Fallback mockup local state if project is recently created and db is empty
+
+        if (res.status === 404) {
+          // 방금 생성되어 아직 DB에 없는 경우 — 1단계부터 시작
           setProject({
             id: projectId,
             title: "신규 공모 지원 프로젝트",
@@ -149,34 +146,23 @@ export default function ProjectDetailPage({ params }: PageProps) {
           setLoading(false);
           return;
         }
+        if (!res.ok) throw new Error("프로젝트를 불러오지 못했습니다.");
 
+        const { project: found, analysis: savedAnalysis, plan: savedPlan } = await res.json();
         setProject(found);
 
-        // Adjust step based on database status
+        // 저장된 실제 데이터로 각 단계 복원
+        if (savedAnalysis) setAnalysis(savedAnalysis);
+        if (savedPlan) setPlan(savedPlan);
+        if (found.answers) setAnswers(found.answers);
+
+        // 상태에 따라 표시할 단계 결정 (이전 단계로 자유롭게 이동 가능)
         if (found.status === "completed") {
           setActiveStep(3);
-          // fetch generated plan mock
-          setPlan({
-            businessName: `[초안] ${found.initialIdea || "상용화"} 프로젝트`,
-            necessity: "현재 시장은 핵심 문제에 직면해 있습니다. 본 과제는 이의 해결을 최우선 목표로 삼고 있습니다.",
-            purpose: "지원 기간 내 솔루션 프로토타입 제작 및 현장 실증 완료",
-            schedule: "1. 환경 설계 | 2. 프로토타입 설계 및 개발 | 3. 성능 평가 및 개선 | 4. 사업화 연계 및 론칭",
-            indicator: "솔루션 검증 완성도 95% 이상 달성, 고객 피드백 만족도 4.0/5.0 이상",
-            benefit: "본 사업 추진 시 25%의 비용 절감 및 향후 시장 경쟁력 제고 기대",
-          });
         } else if (found.status === "coaching") {
           setActiveStep(2);
-          if (found.answers) setAnswers(found.answers);
         } else if (found.status === "notice_analyzed") {
-          setActiveStep(1.5); // Showing analysis screen
-          setAnalysis({
-            summary: "청년 창업 및 기술 혁신을 발굴하여 시제품 상용화를 가속화하기 위한 사업입니다.",
-            target: "창업 3년 이내의 신생 벤처 및 기술 개발 능력을 보유한 개인/법인",
-            evaluationCriteria: "기술의 참신성 및 완성도(45%), 시장 성장성(35%), 예산 구성 적정성(20%)",
-            budget: "프로젝트당 최대 5,000만원 한도 (정부지원 80%, 자부담 20%)",
-            keywords: ["창업지원", "시제품제작", "혁신기술"],
-            evidence: "공고문 본문 제3조(지원대상) 및 제5조(평가기준) 참조",
-          });
+          setActiveStep(1.5);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "프로젝트 로드 중 오류가 발생했습니다.";
@@ -336,8 +322,8 @@ ${plan.benefit}
       <div className="border-b border-slate-200 bg-white">
         <div className="container mx-auto max-w-4xl px-6 py-4">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-400 sm:text-sm">
-            <button 
-              onClick={() => setActiveStep(1)} 
+            <button
+              onClick={() => setActiveStep(analysis ? 1.5 : 1)}
               className={`flex items-center gap-1.5 transition-colors ${activeStep >= 1 ? "text-blue-600 font-bold" : ""}`}
             >
               <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${activeStep >= 1 ? "bg-blue-600 text-white" : "bg-slate-100"}`}>1</span>
