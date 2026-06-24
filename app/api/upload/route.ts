@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { PDFParse } from 'pdf-parse';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
